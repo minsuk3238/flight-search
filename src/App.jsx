@@ -6,10 +6,12 @@ import PopularDestinations from './components/PopularDestinations.jsx';
 import FilterBar from './components/FilterBar.jsx';
 import SmartRecommendations from './components/SmartRecommendations.jsx';
 import PriceTrendChart from './components/PriceTrendChart.jsx';
+import MonthlyPriceCalendar from './components/MonthlyPriceCalendar.jsx';
 import FlightList from './components/FlightList.jsx';
 import ShareModal from './components/ShareModal.jsx';
 import PriceAlertModal from './components/PriceAlertModal.jsx';
-import { AIRPORTS, POPULAR_DESTINATIONS, clientSearchFlights } from './services/flightEngine.js';
+import { Calendar as CalendarIcon, List, Sparkles } from 'lucide-react';
+import { AIRPORTS, POPULAR_DESTINATIONS, clientSearchFlights, generateMonthlyCalendarPrices } from './services/flightEngine.js';
 
 function formatDate(date) {
   const y = date.getFullYear();
@@ -68,6 +70,14 @@ export default function App() {
   const [searchParams, setSearchParams] = useState(getInitialParams);
   const [filters, setFilters] = useState(getInitialFilters);
 
+  // 뷰 모드 ('calendar' | 'list')
+  const [viewMode, setViewMode] = useState('calendar');
+
+  // 캘린더 기준 월 (기본값: 출발일 기준 월)
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    return new Date(searchParams.startDate || new Date());
+  });
+
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
 
@@ -79,7 +89,6 @@ export default function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(new Date());
 
-  // 1. 공항 데이터 로드
   useEffect(() => {
     axios.get('/api/airports')
       .then(res => {
@@ -92,7 +101,6 @@ export default function App() {
       });
   }, []);
 
-  // 2. URL 동기화
   useEffect(() => {
     const params = new URLSearchParams();
     params.set('mode', searchParams.searchMode);
@@ -127,13 +135,12 @@ export default function App() {
     window.history.replaceState(null, '', newUrl);
   }, [searchParams, filters]);
 
-  // 3. 실시간 항공권 검색 및 필터링 실행 함수
+  // 검색 실행
   const executeSearch = useCallback(async (isManualRefresh = false) => {
     if (isManualRefresh) setIsRefreshing(true);
     else setIsLoading(true);
 
     try {
-      // 1순위: 백엔드 Express API
       const searchRes = await axios.post('/api/flights/search', {
         ...searchParams,
         ...filters,
@@ -141,7 +148,6 @@ export default function App() {
       setSearchResults(searchRes.data);
       setLastUpdated(new Date());
 
-      // 트렌드
       const trendsRes = await axios.get('/api/flights/trends', {
         params: {
           tripType: searchParams.tripType,
@@ -153,7 +159,6 @@ export default function App() {
       });
       setPriceTrends(trendsRes.data.trends || []);
     } catch {
-      // 2순위: 클라이언트 Standalone 즉각 실행
       const localResult = clientSearchFlights(searchParams, filters);
       setSearchResults(localResult);
       setLastUpdated(new Date());
@@ -163,7 +168,7 @@ export default function App() {
     }
   }, [searchParams, filters]);
 
-  // ★ 핵심 수정: filters나 searchParams가 변경될 때마다 화면에 즉각 실시간 반영!
+  // 실시간 조건 변경 시 즉각 반영
   useEffect(() => {
     executeSearch();
   }, [
@@ -188,6 +193,43 @@ export default function App() {
     filters.sortBy,
   ]);
 
+  // 월별 캘린더 데이터 계산
+  const monthlyCalendarData = useMemo(() => {
+    return generateMonthlyCalendarPrices({
+      origin: searchParams.origin,
+      destination: searchParams.destination,
+      year: calendarMonth.getFullYear(),
+      month: calendarMonth.getMonth(),
+      stayDays: searchParams.stayDays || 3,
+      depTimeStart: filters.depTimeStart,
+      depTimeEnd: filters.depTimeEnd,
+      tripType: searchParams.tripType,
+    });
+  }, [searchParams.origin, searchParams.destination, calendarMonth, searchParams.stayDays, filters.depTimeStart, filters.depTimeEnd, searchParams.tripType]);
+
+  // 캘린더에서 날짜 클릭 시
+  const handleSelectCalendarDate = (dateStr) => {
+    const d = new Date(dateStr);
+    const ret = new Date(d);
+    ret.setDate(d.getDate() + (searchParams.stayDays || 3));
+
+    setSearchParams(prev => ({
+      ...prev,
+      startDate: dateStr,
+      endDate: formatDate(ret),
+      departureDate: dateStr,
+      returnDate: formatDate(ret),
+    }));
+  };
+
+  const handlePrevMonth = () => {
+    setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
   const handleManualRefresh = () => {
     executeSearch(true);
   };
@@ -208,15 +250,6 @@ export default function App() {
 
   const handleSelectPopularDestination = (destCode) => {
     setSearchParams(prev => ({ ...prev, destination: destCode }));
-  };
-
-  const handleSelectTrendDate = (newDepDate, newRetDate) => {
-    setSearchParams(prev => ({
-      ...prev,
-      startDate: newDepDate,
-      departureDate: newDepDate,
-      returnDate: newRetDate || prev.returnDate,
-    }));
   };
 
   const currentLowestPrice = searchResults?.priceSummary?.min || null;
@@ -248,20 +281,70 @@ export default function App() {
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
+        {/* 스마트 3대 핵심 픽 */}
         {searchResults?.recommendations && (
           <SmartRecommendations
             recommendations={searchResults.recommendations}
           />
         )}
 
-        {priceTrends.length > 0 && (
-          <PriceTrendChart
-            trends={priceTrends}
-            currentDepartureDate={searchParams.startDate || searchParams.departureDate}
-            onSelectDate={handleSelectTrendDate}
+        {/* 📅 뷰 모드 전환 탭 (월별 최저가 캘린더 vs 간단 트렌드) */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2">
+            <h2 className="text-base font-extrabold text-slate-900">
+              일정별 가격 비교 방식
+            </h2>
+          </div>
+
+          <div className="flex items-center bg-white p-1 rounded-xl border border-slate-200 shadow-sm space-x-1">
+            <button
+              onClick={() => setViewMode('calendar')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
+                viewMode === 'calendar'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <CalendarIcon className="w-3.5 h-3.5" />
+              <span>📅 월별 달력 뷰</span>
+            </button>
+            <button
+              onClick={() => setViewMode('trend')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
+                viewMode === 'trend'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>📊 바 차트 뷰</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 1. 📅 월별 전체 캘린더 뷰 (사용자 요청 핵심 기능!) */}
+        {viewMode === 'calendar' ? (
+          <MonthlyPriceCalendar
+            selectedDepartureDate={searchParams.startDate || searchParams.departureDate}
+            onSelectDate={handleSelectCalendarDate}
+            stayDays={searchParams.stayDays || 3}
+            calendarData={monthlyCalendarData}
+            currentMonth={calendarMonth}
+            onPrevMonth={handlePrevMonth}
+            onNextMonth={handleNextMonth}
           />
+        ) : (
+          /* 2. 📊 간단 바 차트 뷰 */
+          priceTrends.length > 0 && (
+            <PriceTrendChart
+              trends={priceTrends}
+              currentDepartureDate={searchParams.startDate || searchParams.departureDate}
+              onSelectDate={(dep, ret) => handleSelectCalendarDate(dep)}
+            />
+          )
         )}
 
+        {/* 필터 바 + 항공권 목록 (2단 레이아웃) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           <div className="lg:col-span-4 sticky top-20 z-30">
             <FilterBar
@@ -294,13 +377,10 @@ export default function App() {
           <div className="flex items-center justify-center space-x-2 font-bold text-slate-700">
             <span>✈️ 네이버 항공권 스마트 파인더</span>
             <span>·</span>
-            <span className="text-naver-green">유연 기간 & 시간대 맞춤 최저가</span>
+            <span className="text-naver-green">월별 캘린더 최저가 & 시간대 맞춤</span>
           </div>
           <p>
-            특정 날짜 고정 없이 원하는 기간 및 출발/귀국 시간대 조건에 부합하는 최저가 일정을 혼합 비교합니다.
-          </p>
-          <p className="text-[11px] text-slate-400">
-            마지막 데이터 동기화: {lastUpdated.toLocaleTimeString('ko-KR')}
+            달력에서 가장 저렴한 날짜를 한눈에 보고, 내가 원하는 시간대의 최적 항공권을 실시간으로 찾아보세요.
           </p>
         </div>
       </footer>

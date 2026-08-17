@@ -129,6 +129,49 @@ const routeMap = {
   'GUM': { duration: 270, basePrice: 220000 },
 };
 
+// 월별 캘린더 전체 날짜의 최저가 매트릭스 계산기
+export function generateMonthlyCalendarPrices({
+  origin = 'ICN',
+  destination = 'NRT',
+  year,
+  month, // 0-indexed
+  stayDays = 3,
+  depTimeStart = '09:00',
+  depTimeEnd = '11:00',
+  tripType = 'round',
+}) {
+  const routeInfo = routeMap[destination] || { duration: 200, basePrice: 180000 };
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const calendarResults = [];
+
+  const timeBonus = (depTimeStart === '09:00' && depTimeEnd === '11:00') ? 1.05 : 1.0;
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const depMult = getDateMultiplier(dateStr);
+    const tripFactor = tripType === 'round' ? 1.85 : 1.0;
+
+    // LCC 최저가 기준 금액 산출
+    const price = Math.round((routeInfo.basePrice * depMult * 0.92 * tripFactor * 1.3 * timeBonus) / 1000) * 1000;
+    const airlineName = ['제주항공', '진에어', '티웨이항공', '에어서울', '에어로케이'][day % 5];
+
+    calendarResults.push({
+      date: dateStr,
+      day: day,
+      price: price,
+      airlineName: airlineName,
+      formattedPrice: `${price.toLocaleString('ko-KR')}원`,
+    });
+  }
+
+  const minP = Math.min(...calendarResults.map(c => c.price));
+  calendarResults.forEach(c => {
+    c.isCheapest = (c.price === minP);
+  });
+
+  return calendarResults;
+}
+
 export function clientSearchFlights(params, filters) {
   const {
     searchMode = 'flexible',
@@ -154,8 +197,6 @@ export function clientSearchFlights(params, filters) {
     airlineCategory = 'ALL',
     baggageOnly = false,
     sortBy = 'price_asc',
-    maxPrice = null,
-    minPrice = null,
   } = filters;
 
   const originAirport = AIRPORTS.find(a => a.code === origin) || { code: origin, name: origin, city: origin };
