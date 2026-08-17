@@ -79,6 +79,7 @@ export default function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(new Date());
 
+  // 1. 공항 데이터 로드
   useEffect(() => {
     axios.get('/api/airports')
       .then(res => {
@@ -91,6 +92,7 @@ export default function App() {
       });
   }, []);
 
+  // 2. URL 동기화
   useEffect(() => {
     const params = new URLSearchParams();
     params.set('mode', searchParams.searchMode);
@@ -125,11 +127,13 @@ export default function App() {
     window.history.replaceState(null, '', newUrl);
   }, [searchParams, filters]);
 
+  // 3. 실시간 항공권 검색 및 필터링 실행 함수
   const executeSearch = useCallback(async (isManualRefresh = false) => {
     if (isManualRefresh) setIsRefreshing(true);
     else setIsLoading(true);
 
     try {
+      // 1순위: 백엔드 Express API
       const searchRes = await axios.post('/api/flights/search', {
         ...searchParams,
         ...filters,
@@ -137,6 +141,7 @@ export default function App() {
       setSearchResults(searchRes.data);
       setLastUpdated(new Date());
 
+      // 트렌드
       const trendsRes = await axios.get('/api/flights/trends', {
         params: {
           tripType: searchParams.tripType,
@@ -148,6 +153,7 @@ export default function App() {
       });
       setPriceTrends(trendsRes.data.trends || []);
     } catch {
+      // 2순위: 클라이언트 Standalone 즉각 실행
       const localResult = clientSearchFlights(searchParams, filters);
       setSearchResults(localResult);
       setLastUpdated(new Date());
@@ -157,9 +163,30 @@ export default function App() {
     }
   }, [searchParams, filters]);
 
+  // ★ 핵심 수정: filters나 searchParams가 변경될 때마다 화면에 즉각 실시간 반영!
   useEffect(() => {
     executeSearch();
-  }, []);
+  }, [
+    searchParams.origin,
+    searchParams.destination,
+    searchParams.startDate,
+    searchParams.endDate,
+    searchParams.stayDays,
+    searchParams.departureDate,
+    searchParams.returnDate,
+    searchParams.searchMode,
+    searchParams.adults,
+    searchParams.directOnly,
+    filters.depTimeStart,
+    filters.depTimeEnd,
+    filters.retTimeStart,
+    filters.retTimeEnd,
+    filters.selectedAirlines,
+    filters.selectedDaysOfWeek,
+    filters.airlineCategory,
+    filters.baggageOnly,
+    filters.sortBy,
+  ]);
 
   const handleManualRefresh = () => {
     executeSearch(true);
@@ -181,9 +208,6 @@ export default function App() {
 
   const handleSelectPopularDestination = (destCode) => {
     setSearchParams(prev => ({ ...prev, destination: destCode }));
-    setTimeout(() => {
-      executeSearch();
-    }, 100);
   };
 
   const handleSelectTrendDate = (newDepDate, newRetDate) => {
@@ -193,9 +217,6 @@ export default function App() {
       departureDate: newDepDate,
       returnDate: newRetDate || prev.returnDate,
     }));
-    setTimeout(() => {
-      executeSearch();
-    }, 100);
   };
 
   const currentLowestPrice = searchResults?.priceSummary?.min || null;
@@ -279,7 +300,7 @@ export default function App() {
             특정 날짜 고정 없이 원하는 기간 및 출발/귀국 시간대 조건에 부합하는 최저가 일정을 혼합 비교합니다.
           </p>
           <p className="text-[11px] text-slate-400">
-            마지막 데이터 동기화: {lastUpdated.toLocaleTimeString('ko-KR')} (새로고침 버튼으로 언제든 최신 운임 갱신)
+            마지막 데이터 동기화: {lastUpdated.toLocaleTimeString('ko-KR')}
           </p>
         </div>
       </footer>
