@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowUpDown, AlertCircle, Sparkles, Filter } from 'lucide-react';
+import { ArrowUpDown, AlertCircle, Sparkles, RefreshCw, Clock } from 'lucide-react';
 import FlightCard from './FlightCard.jsx';
 
 export default function FlightList({
@@ -8,23 +8,43 @@ export default function FlightList({
   setSortBy,
   adults = 1,
   onResetFilters,
+  lastUpdated,
+  onRefresh,
+  isRefreshing,
 }) {
   const sortOptions = [
-    { key: 'recommend', label: 'AI 스마트 추천순' },
     { key: 'price_asc', label: '최저가순' },
+    { key: 'recommend', label: 'AI 스마트 추천순' },
+    { key: 'date_asc', label: '출발 날짜순' },
     { key: 'duration_asc', label: '최단 비행시간순' },
     { key: 'dep_time_asc', label: '출발 빠른순' },
-    { key: 'dep_time_desc', label: '출발 늦은순' },
   ];
+
+  const timeAgoText = lastUpdated
+    ? `${lastUpdated.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} 기준`
+    : '방금 전 기준';
 
   return (
     <div className="space-y-4">
-      {/* 정렬 바 */}
+      {/* 정렬 및 데이터 기준 시점 바 */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-sm">
         <div className="flex items-center space-x-2">
-          <span className="text-xs font-bold text-slate-700">
+          <span className="text-xs font-bold text-slate-800">
             총 <span className="text-naver-green font-extrabold">{flights.length}</span>개 일정 검색됨
           </span>
+          <span className="text-slate-300">|</span>
+          <div className="flex items-center space-x-1 text-[11px] text-slate-500 font-medium">
+            <Clock className="w-3 h-3 text-slate-400" />
+            <span>{timeAgoText}</span>
+          </div>
+          <button
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+            title="실시간 다시 조회"
+          >
+            <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin text-naver-green' : ''}`} />
+          </button>
         </div>
 
         {/* 정렬 탭 */}
@@ -53,10 +73,10 @@ export default function FlightList({
           </div>
           <div>
             <h3 className="text-base font-extrabold text-slate-800">
-              설정하신 조건에 맞는 항공편이 없습니다.
+              설정하신 시간대 조건에 맞는 항공편이 없습니다.
             </h3>
             <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-              지정하신 탑승 시간대(출발/귀국) 또는 선택된 항공사 필터 조건이 너무 엄격할 수 있습니다. 시간 범위를 넓히거나 필터를 초기화해보세요.
+              현재 설정된 탑승 시간대(가는 편 / 오는 편) 또는 항공사 필터 조건에 해당하는 스케줄이 없습니다. 시간 범위를 넓혀보세요.
             </p>
           </div>
           <button
@@ -69,7 +89,12 @@ export default function FlightList({
       ) : (
         <div className="space-y-3">
           {flights.map(flight => (
-            <FlightCard key={flight.id} flight={flight} adults={adults} />
+            <FlightCard
+              key={flight.id}
+              flight={flight}
+              adults={adults}
+              lastUpdated={lastUpdated}
+            />
           ))}
         </div>
       )}

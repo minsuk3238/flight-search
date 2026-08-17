@@ -1,12 +1,17 @@
 import React from 'react';
-import { Plane, Share2, Bell, Sparkles, ExternalLink } from 'lucide-react';
+import { Plane, Share2, Bell, RefreshCw, ExternalLink, ShieldCheck } from 'lucide-react';
 
-export default function Navbar({ onOpenShare, onOpenAlert, mainNaverUrl }) {
+export default function Navbar({ onOpenShare, onOpenAlert, mainNaverUrl, lastUpdated, onRefresh, isRefreshing }) {
+  // 포맷팅된 시간 문자열
+  const formattedTime = lastUpdated
+    ? `${lastUpdated.toLocaleDateString('ko-KR')} ${lastUpdated.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+    : '방금 전';
+
   return (
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* 로고 및 브랜딩 */}
+          {/* 로고 */}
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-xl bg-naver-green flex items-center justify-center text-white shadow-md shadow-naver-green/20">
               <Plane className="w-6 h-6 transform -rotate-45" />
@@ -21,12 +26,27 @@ export default function Navbar({ onOpenShare, onOpenAlert, mainNaverUrl }) {
                 </span>
               </div>
               <p className="text-xs text-slate-500 hidden sm:block">
-                스마트 시간대 필터 & 최저가 비교 추천
+                스마트 유연 기간 & 맞춤 시간대 최저가
               </p>
             </div>
           </div>
 
-          {/* 우측 액션 버튼들 */}
+          {/* 중앙: 실시간 기준 시점 표기 뱃지 */}
+          <div className="hidden lg:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200/80 text-xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-slate-500 font-medium">데이터 기준 시점:</span>
+            <span className="font-bold text-slate-800 font-mono">{formattedTime}</span>
+            <button
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition ml-1"
+              title="데이터 새로고침"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-naver-green' : ''}`} />
+            </button>
+          </div>
+
+          {/* 우측 버튼들 */}
           <div className="flex items-center space-x-2 sm:space-x-3">
             {mainNaverUrl && (
               <a
@@ -35,7 +55,7 @@ export default function Navbar({ onOpenShare, onOpenAlert, mainNaverUrl }) {
                 rel="noopener noreferrer"
                 className="hidden md:inline-flex items-center space-x-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
               >
-                <span>네이버 항공권 원문</span>
+                <span>네이버 실시간 원문</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             )}

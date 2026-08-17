@@ -76,6 +76,8 @@ export default function App() {
   const [searchResults, setSearchResults] = useState(null);
   const [priceTrends, setPriceTrends] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(new Date());
 
   useEffect(() => {
     axios.get('/api/airports')
@@ -84,13 +86,11 @@ export default function App() {
         if (res.data.popularDestinations) setPopularDestinations(res.data.popularDestinations);
       })
       .catch(() => {
-        // GitHub Pages 등 정적 호스팅 시 내장 데이터 사용
         setAirports(AIRPORTS);
         setPopularDestinations(POPULAR_DESTINATIONS);
       });
   }, []);
 
-  // URL 동기화
   useEffect(() => {
     const params = new URLSearchParams();
     params.set('mode', searchParams.searchMode);
@@ -125,15 +125,17 @@ export default function App() {
     window.history.replaceState(null, '', newUrl);
   }, [searchParams, filters]);
 
-  // 검색 실행 (API 서버 우선 ➔ 없을 시 Standalone 엔진 자동 실행)
-  const executeSearch = useCallback(async () => {
-    setIsLoading(true);
+  const executeSearch = useCallback(async (isManualRefresh = false) => {
+    if (isManualRefresh) setIsRefreshing(true);
+    else setIsLoading(true);
+
     try {
       const searchRes = await axios.post('/api/flights/search', {
         ...searchParams,
         ...filters,
       });
       setSearchResults(searchRes.data);
+      setLastUpdated(new Date());
 
       const trendsRes = await axios.get('/api/flights/trends', {
         params: {
@@ -146,17 +148,22 @@ export default function App() {
       });
       setPriceTrends(trendsRes.data.trends || []);
     } catch {
-      // API 서버가 없는 GitHub Pages 환경일 때 즉시 Standalone 엔진으로 동작
       const localResult = clientSearchFlights(searchParams, filters);
       setSearchResults(localResult);
+      setLastUpdated(new Date());
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, [searchParams, filters]);
 
   useEffect(() => {
     executeSearch();
   }, []);
+
+  const handleManualRefresh = () => {
+    executeSearch(true);
+  };
 
   const handleResetFilters = () => {
     setFilters({
@@ -199,6 +206,9 @@ export default function App() {
         onOpenShare={() => setIsShareOpen(true)}
         onOpenAlert={() => setIsAlertOpen(true)}
         mainNaverUrl={searchResults?.mainNaverUrl}
+        lastUpdated={lastUpdated}
+        onRefresh={handleManualRefresh}
+        isRefreshing={isRefreshing}
       />
 
       <HeroSearch
@@ -206,7 +216,7 @@ export default function App() {
         setSearchParams={setSearchParams}
         filters={filters}
         setFilters={setFilters}
-        onSearch={executeSearch}
+        onSearch={() => executeSearch(false)}
         isLoading={isLoading}
         airports={airports}
       />
@@ -250,6 +260,9 @@ export default function App() {
               setSortBy={(newSort) => setFilters(prev => ({ ...prev, sortBy: newSort }))}
               adults={searchParams.adults}
               onResetFilters={handleResetFilters}
+              lastUpdated={lastUpdated}
+              onRefresh={handleManualRefresh}
+              isRefreshing={isRefreshing}
             />
           </div>
         </div>
@@ -264,6 +277,9 @@ export default function App() {
           </div>
           <p>
             특정 날짜 고정 없이 원하는 기간 및 출발/귀국 시간대 조건에 부합하는 최저가 일정을 혼합 비교합니다.
+          </p>
+          <p className="text-[11px] text-slate-400">
+            마지막 데이터 동기화: {lastUpdated.toLocaleTimeString('ko-KR')} (새로고침 버튼으로 언제든 최신 운임 갱신)
           </p>
         </div>
       </footer>
